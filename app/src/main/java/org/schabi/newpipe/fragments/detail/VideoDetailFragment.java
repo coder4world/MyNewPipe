@@ -133,6 +133,11 @@ import io.reactivex.rxjava3.disposables.CompositeDisposable;
 import io.reactivex.rxjava3.disposables.Disposable;
 import io.reactivex.rxjava3.schedulers.Schedulers;
 
+import android.app.TimePickerDialog;
+import android.widget.TimePicker;
+import java.util.Calendar;
+import android.view.KeyEvent;
+
 public final class VideoDetailFragment
         extends BaseStateFragment<StreamInfo>
         implements BackPressable,
@@ -327,6 +332,13 @@ public final class VideoDetailFragment
         activity.getContentResolver().registerContentObserver(
                 Settings.System.getUriFor(Settings.System.ACCELEROMETER_ROTATION), false,
                 settingsContentObserver);
+
+        //IntentFilter filter = new IntentFilter(Intent.ACTION_MEDIA_BUTTON);
+        //HeadsetButtonReceiver receiver = new HeadsetButtonReceiver();
+        // 确保 receiver 和 filter 已经定义
+        //getActivity().registerReceiver(receiver, filter);
+        //receiver.player= player;
+        
     }
 
     @Override
@@ -389,7 +401,6 @@ public final class VideoDetailFragment
     @Override
     public void onDestroy() {
         super.onDestroy();
-
         // Stop the service when user leaves the app with double back press
         // if video player is selected. Otherwise unbind
         if (activity.isFinishing() && isPlayerAvailable() && player.videoPlayerSelected()) {
@@ -445,6 +456,53 @@ public final class VideoDetailFragment
         }
     }
 
+    // 定义成员变量
+    private Handler handler = new Handler();
+    private Runnable stopPlaybackRunnable;
+
+    // 显示选择时间的 TimePickerDialog
+    private void showTimePickerDialog() {
+        Calendar calendar = Calendar.getInstance();
+        int hour = calendar.get(Calendar.HOUR_OF_DAY);
+        int minute = calendar.get(Calendar.MINUTE);
+        Log.d("XPD", "TimePickerDialog : " + new Exception().getStackTrace()[0].getMethodName());
+        // 创建并显示 TimePickerDialog
+        TimePickerDialog timePickerDialog = new TimePickerDialog(requireContext(), (TimePicker view, int selectedHour, int selectedMinute) -> {
+            // 处理用户选择的时间
+            handleTimeSet(selectedHour, selectedMinute);
+        }, hour, minute, true); // 最后一个参数 true 表示 24 小时制
+        timePickerDialog.show();
+    }
+
+    private void handleTimeSet(int hour, int minute) {
+        // 计算定时时间 (以毫秒为单位)
+        int timeInMillis = (hour * 60 * 60 * 1000) + (minute * 60 * 1000);
+        
+        // 显示用户选择的时间
+        String time = String.format("%02d:%02d", hour, minute);
+        Toast.makeText(requireContext(), "播放将在 " + time + " 停止", Toast.LENGTH_SHORT).show();
+    
+        // 如果之前有定时任务，取消它
+        if (stopPlaybackRunnable != null) {
+            handler.removeCallbacks(stopPlaybackRunnable);
+        }
+    
+        // 创建新的定时任务
+        stopPlaybackRunnable = () -> stopPlayback();
+    
+        // 启动定时器
+        Log.d(TAG, "XPD start timer, timeInMillis: "+ timeInMillis);
+        handler.postDelayed(stopPlaybackRunnable, timeInMillis);
+    }
+
+    // 实现播放停止的逻辑
+    private void stopPlayback() {
+    // 这里可以实现播放停止的逻辑
+    Toast.makeText(requireContext(), "播放已停止", Toast.LENGTH_SHORT).show();
+    Log.d("XPD", "VideoDetailFragment time up stop play  Method: " + new Exception().getStackTrace()[0].getMethodName());
+     player.pause();  // 例如暂停播放器
+}
+
     /*//////////////////////////////////////////////////////////////////////////
     // OnClick
     //////////////////////////////////////////////////////////////////////////*/
@@ -474,6 +532,10 @@ public final class VideoDetailFragment
         });
 
         binding.detailControlsBackground.setOnClickListener(v -> openBackgroundPlayer(false));
+       binding.detailControlsTimer.setOnClickListener(v -> {
+            Log.d("XPD", "VideoDetailFragment  Method: " + new Exception().getStackTrace()[0].getMethodName());
+            showTimePickerDialog();
+        });
         binding.detailControlsPopup.setOnClickListener(v -> openPopupPlayer(false));
         binding.detailControlsPlaylistAppend.setOnClickListener(makeOnClickListener(info -> {
             if (getFM() != null && currentInfo != null) {
@@ -1388,6 +1450,17 @@ public final class VideoDetailFragment
         broadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(final Context context, final Intent intent) {
+            Log.d("XPD", "VideoDetailFragment pgetAction "+intent.getAction());
+                if (Intent.ACTION_MEDIA_BUTTON.equals(intent.getAction())) {
+                    KeyEvent event = intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT);
+                    if (event != null && event.getAction() == KeyEvent.ACTION_DOWN) {
+                        if (event.getKeyCode() == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) {
+                            Log.d("XPD", "VideoDetailFragment playPause  Method: " + new Exception().getStackTrace()[0].getMethodName());
+                            player.playPause();
+                        }
+                    }
+                }
+
                 switch (intent.getAction()) {
                     case ACTION_SHOW_MAIN_PLAYER:
                         bottomSheetBehavior.setState(BottomSheetBehavior.STATE_EXPANDED);
